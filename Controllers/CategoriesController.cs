@@ -7,6 +7,7 @@ using Mapster;
 using API_eCommerceProject.DTO.Responses;
 using Microsoft.Extensions.Localization;
 using API_eCommerceProject.Model.Category;
+using Microsoft.EntityFrameworkCore;
 
 namespace API_eCommerceProject.Controllers
 {
@@ -23,25 +24,41 @@ namespace API_eCommerceProject.Controllers
 
 
         [HttpGet("")]
-        public IActionResult Index() {
+        public IActionResult Index([FromQuery] string lang = "en") {
             var cats = context.Categories
+                       .Include(c => c.CategoryTranslations)
                       .Where(c=>c.Status==Status.Active)
                       .ToList()
                       .Adapt<List<CategoriesResponseDTO>>();
 
-            return Ok(new { message = _localizer["success"].Value, cats });
+            var result = cats.Select(
+                cat => new {
+                    Id = cat.Id,
+                    Name = cat.CategoryTranslations
+            .FirstOrDefault(t => t.Language == lang)?.Name    // from query param
+            ?? cat.CategoryTranslations.FirstOrDefault(t => t.Language == "en")?.Name  // fallback
+            ?? "Unnamed"  // default if no translations exist
+                }
+                );
+            return Ok(new { message = _localizer["success"].Value, result });
         }
 
         //admin
         [HttpGet("all")]
-        public IActionResult GetAllt()
+        public IActionResult GetAll([FromQuery] string lang="en")
         {
-            var cats = context.Categories
+            var cats = context.Categories.Include(c => c.CategoryTranslations)
                       .OrderByDescending(c=> c.createdAt)
                       .ToList()
                       .Adapt<List<CategoriesResponseDTO>>();
+            var result = cats.Select(
+                cat=> new { 
+                    Id=cat.Id,
+                    Name=cat.CategoryTranslations.FirstOrDefault(t=>t.Language == lang).Name
+                }
+                );
 
-            return Ok(new { message = _localizer["success"].Value, cats });
+            return Ok(new { message = _localizer["success"].Value, result });
         }
 
         [HttpGet("{id}")]
@@ -54,12 +71,12 @@ namespace API_eCommerceProject.Controllers
         }
 
 
-        [HttpPost("")]
+        [HttpPost("create")]
         public IActionResult Create([FromBody] CategoriesRequestDTO request) 
         {
             var cat = request.Adapt<Category>();
 
-            context.Add(cat);
+            context.Categories.Add(cat);
             context.SaveChanges();
 
             return Ok(new { message = _localizer["success"].Value });
